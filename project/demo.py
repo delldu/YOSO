@@ -11,5 +11,5 @@
 
 import image_panoptic
 
-image_panoptic.image_predict("images/*.png", "output")
-# image_panoptic.image_predict("images/demo/*.jpg", "output/demo")
+# image_panoptic.image_predict("images/*.png", "output")
+image_panoptic.image_predict("images/demo/*.jpg", "output/demo")

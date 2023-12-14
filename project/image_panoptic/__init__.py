@@ -25,7 +25,6 @@ from . import ade20k
 import pdb
 
 
-
 def get_segment_model():
     """Create model."""
 
@@ -36,15 +35,15 @@ def get_segment_model():
     model.eval()
 
     print(f"Running on {device} ...")
-    if 'cpu' in str(device.type):
+    if "cpu" in str(device.type):
         model.float()
-   
+
     # make sure model good for C/C++
     model = torch.jit.script(model)
     # https://github.com/pytorch/pytorch/issues/52286
     torch._C._jit_set_profiling_executor(False)
     # C++ Reference
-    # torch::jit::getProfilingMode() = false;                                                                                                             
+    # torch::jit::getProfilingMode() = false;
     # torch::jit::setTensorExprFuserEnabled(false);
 
     todos.data.mkdir("output")

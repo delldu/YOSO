@@ -15,6 +15,7 @@ import image_panoptic
 import argparse
 import pdb
 
+
 def test_input_shape():
     import time
     import random
@@ -87,12 +88,13 @@ def export_onnx_model():
     torch_outputs = [dummy_output.cpu()]
 
     # 2. Export onnx model
-    input_names = [ "input" ]
-    output_names = [ "output" ]
+    input_names = ["input"]
+    output_names = ["output"]
     onnx_filename = "output/image_panoptic.onnx"
 
-    torch.onnx.export(model, dummy_input, onnx_filename, 
-        verbose=False, input_names=input_names, output_names=output_names)
+    torch.onnx.export(
+        model, dummy_input, onnx_filename, verbose=False, input_names=input_names, output_names=output_names
+    )
 
     # 3. Check onnx model file
     onnx_model = onnx.load(onnx_filename)
@@ -104,15 +106,15 @@ def export_onnx_model():
     # print(onnx.helper.printable_graph(onnx_model.graph))
 
     # 4. Run onnx model
-    if 'cuda' in device.type:
-        ort_session = onnxruntime.InferenceSession(onnx_filename, providers=['CUDAExecutionProvider'])
-    else:        
-        ort_session = onnxruntime.InferenceSession(onnx_filename, providers=['CPUExecutionProvider'])
+    if "cuda" in device.type:
+        ort_session = onnxruntime.InferenceSession(onnx_filename, providers=["CUDAExecutionProvider"])
+    else:
+        ort_session = onnxruntime.InferenceSession(onnx_filename, providers=["CPUExecutionProvider"])
 
     def to_numpy(tensor):
         return tensor.detach().cpu().numpy() if tensor.requires_grad else tensor.cpu().numpy()
 
-    onnx_inputs = {input_names[0]: to_numpy(dummy_input) }
+    onnx_inputs = {input_names[0]: to_numpy(dummy_input)}
     onnx_outputs = ort_session.run(None, onnx_inputs)
 
     # 5.Compare output results
@@ -123,12 +125,11 @@ def export_onnx_model():
     print("!!!!!! Torch and ONNX Runtime output matched !!!!!!")
 
 
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Smoke Test')
-    parser.add_argument('-s', '--shape_test', action="store_true", help="test shape")
-    parser.add_argument('-b', '--bench_mark', action="store_true", help="test benchmark")
-    parser.add_argument('-e', '--export_onnx', action="store_true", help="txport onnx model")
+    parser = argparse.ArgumentParser(description="Smoke Test")
+    parser.add_argument("-s", "--shape_test", action="store_true", help="test shape")
+    parser.add_argument("-b", "--bench_mark", action="store_true", help="test benchmark")
+    parser.add_argument("-e", "--export_onnx", action="store_true", help="txport onnx model")
     args = parser.parse_args()
 
     if args.shape_test:
@@ -137,6 +138,6 @@ if __name__ == "__main__":
         run_bench_mark()
     if args.export_onnx:
         export_onnx_model()
-    
+
     if not (args.shape_test or args.bench_mark or args.export_onnx):
         parser.print_help()

@@ -22,7 +22,7 @@ setup(
     description="image segment package",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/delldu/SegFormer.git",
+    url="https://github.com/delldu/YOSO.git",
     packages=["image_panoptic"],
     package_data={"image_panoptic": ["models/image_panoptic.pth"]},
     include_package_data=True,

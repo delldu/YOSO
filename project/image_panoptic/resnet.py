@@ -1,12 +1,12 @@
 # Copyright (c) Facebook, Inc. and its affiliates.
-import logging
-import numpy as np
 import torch
 from torch import nn
 import torch.nn.functional as F
+
 from typing import Dict
 
 import pdb
+
 
 class FrozenBatchNorm2d(nn.Module):
     """
@@ -24,7 +24,8 @@ class FrozenBatchNorm2d(nn.Module):
         self.register_buffer("running_var", torch.ones(num_features) - eps)
 
     def forward(self, x):
-        return F.batch_norm(x,
+        return F.batch_norm(
+            x,
             self.running_mean,
             self.running_var,
             self.weight,
@@ -36,10 +37,12 @@ class FrozenBatchNorm2d(nn.Module):
     def __repr__(self):
         return "FrozenBatchNorm2d(num_features={}, eps={})".format(self.num_features, self.eps)
 
+
 class Conv2d(nn.Conv2d):
     """
     A wrapper around :class:`torch.nn.Conv2d` to support empty inputs and more features.
     """
+
     def __init__(self, *args, **kwargs):
         norm = kwargs.pop("norm", None)
         super().__init__(*args, **kwargs)
@@ -70,7 +73,8 @@ class BottleneckBlock(CNNBlockBase):
     1x1, 3x3, 1x1, and a projection shortcut if needed.
     """
 
-    def __init__(self,
+    def __init__(
+        self,
         in_channels,
         out_channels,
         *,
@@ -92,8 +96,8 @@ class BottleneckBlock(CNNBlockBase):
                 bias=False,
                 norm=FrozenBatchNorm2d(out_channels),
             )
-        else: # support torch.jit.script
-            self.shortcut = nn.Identity() # None
+        else:  # support torch.jit.script
+            self.shortcut = nn.Identity()  # None
 
         # The original MSRA ResNet models have stride in the first 1x1 conv
         # The subsequent fb.torch.resnet and Caffe2 ResNe[X]t implementations have
@@ -166,7 +170,6 @@ class BasicStem(CNNBlockBase):
             norm=FrozenBatchNorm2d(out_channels),
         )
 
-
     def forward(self, x):
         x = self.conv1(x)
         x = F.relu_(x)
@@ -178,10 +181,11 @@ class ResNet(nn.Module):
     """
     Implement :paper:`ResNet`.
     """
+
     def __init__(self, stem, stages, out_features):
         super().__init__()
         self.stem = stem
-        
+
         self.stage_names = []
         self.stages = []
         for i, blocks in enumerate(stages):
@@ -194,27 +198,25 @@ class ResNet(nn.Module):
 
         # self.out_features = out_features # ['res2', 'res3', 'res4', 'res5']
 
-
     def forward(self, x) -> Dict[str, torch.Tensor]:
         outputs = {}
         x = self.stem(x)
 
-        # torch.jit.script
+        # torch.jit.script not support
         # for name, stage in zip(self.stage_names, self.stages):
         #     x = stage(x)
         #     if name in self.out_features:
         #         outputs[name] = x
         x = self.res2(x)
-        outputs['res2'] = x
+        outputs["res2"] = x
         x = self.res3(x)
-        outputs['res3'] = x
+        outputs["res3"] = x
         x = self.res4(x)
-        outputs['res4'] = x
+        outputs["res4"] = x
         x = self.res5(x)
-        outputs['res5'] = x
+        outputs["res5"] = x
 
         return outputs
-
 
     def freeze(self, freeze_at=0):
         if freeze_at >= 1:
@@ -227,24 +229,13 @@ class ResNet(nn.Module):
 
     @staticmethod
     def make_stage(block_class, num_blocks, first_stride=None, *, in_channels, out_channels, **kwargs):
-        # if first_stride is not None:
-        #     pdb.set_trace()
-        #     assert "stride" not in kwargs and "stride_per_block" not in kwargs
-        #     kwargs["stride_per_block"] = [first_stride] + [1] * (num_blocks - 1)
-        #     logger = logging.getLogger(__name__)
-        #     logger.warning(
-        #         "ResNet.make_stage(first_stride=) is deprecated!  "
-        #         "Use 'stride_per_block' or 'stride' instead."
-        #     )
-
         blocks = []
         for i in range(num_blocks):
             curr_kwargs = {}
             for k, v in kwargs.items():
                 if k.endswith("_per_block"):
                     assert len(v) == num_blocks, (
-                        f"Argument '{k}' of make_stage should have the "
-                        f"same length as num_blocks={num_blocks}."
+                        f"Argument '{k}' of make_stage should have the " f"same length as num_blocks={num_blocks}."
                     )
                     newk = k[: -len("_per_block")]
                     assert newk not in kwargs, f"Cannot call make_stage with both {k} and {newk}!"
@@ -257,7 +248,6 @@ class ResNet(nn.Module):
         return blocks
 
 
-
 def make_stage(*args, **kwargs):
     return ResNet.make_stage(*args, **kwargs)
 
@@ -266,7 +256,7 @@ def build_resnet50():
     """
     Build resnet50
     """
-    norm = 'FrozenBN'
+    norm = "FrozenBN"
     stem = BasicStem(in_channels=3, out_channels=64)
 
     # fmt: off
@@ -293,8 +283,6 @@ def build_resnet50():
 
     stages = []
 
-    # Avoid creating variables without gradients
-    # It consumes extra memory and may cause allreduce to fail
     out_stage_idx = [
         {"res2": 2, "res3": 3, "res4": 4, "res5": 5}[f] for f in out_features if f != "stem"
     ] # [2, 3, 4, 5]

@@ -23,6 +23,7 @@ SO_B, SO_C, SO_H, SO_W = 1, 3, 800, 800
 
 # RuntimeError: CUDA out of memory. Tried to allocate 600.00 MiB (GPU 0; 10.76 GiB total capacity; 7.83 GiB already allocated; 283.88 MiB free; 7.87 GiB reserved in total by PyTorch)
 
+
 def blender_segment(input_tensor, output_tensor):
     palette = np.array(image_panoptic.ade20k.ADE20K.PALETTE)
     B, C, H, W = input_tensor.size()
@@ -35,6 +36,7 @@ def blender_segment(input_tensor, output_tensor):
     color_tensor = torch.from_numpy(color_numpy).permute(2, 0, 1).unsqueeze(0)
 
     return 0.5 * input_tensor.cpu() + 0.5 * color_tensor / 255.0
+
 
 def compile():
     model, device = image_panoptic.get_tvm_model()
