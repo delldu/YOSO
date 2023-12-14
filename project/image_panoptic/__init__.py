@@ -2,7 +2,7 @@
 #
 # /************************************************************************************
 # ***
-# ***    Copyright Dell 2021, All Rights Reserved.
+# ***    Copyright Dell 2021-2024, All Rights Reserved.
 # ***
 # ***    File Author: Dell, 2021年 12月 14日 星期二 00:22:28 CST
 # ***
@@ -38,19 +38,18 @@ def get_segment_model():
     print(f"Running on {device} ...")
     if 'cpu' in str(device.type):
         model.float()
-
    
-    # # make sure model good for C/C++
-    # model = torch.jit.script(model)
-    # # https://github.com/pytorch/pytorch/issues/52286
-    # torch._C._jit_set_profiling_executor(False)
-    # # C++ Reference
-    # # torch::jit::getProfilingMode() = false;                                                                                                             
-    # # torch::jit::setTensorExprFuserEnabled(false);
+    # make sure model good for C/C++
+    model = torch.jit.script(model)
+    # https://github.com/pytorch/pytorch/issues/52286
+    torch._C._jit_set_profiling_executor(False)
+    # C++ Reference
+    # torch::jit::getProfilingMode() = false;                                                                                                             
+    # torch::jit::setTensorExprFuserEnabled(false);
 
-    # todos.data.mkdir("output")
-    # if not os.path.exists("output/image_panoptic.torch"):
-    #     model.save("output/image_panoptic.torch")
+    todos.data.mkdir("output")
+    if not os.path.exists("output/image_panoptic.torch"):
+        model.save("output/image_panoptic.torch")
 
     return model, device
 

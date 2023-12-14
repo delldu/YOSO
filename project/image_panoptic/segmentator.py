@@ -3,21 +3,14 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-from .resnet import build_resnet_backbone
+from .resnet import build_resnet50
 from .neck import YOSONeck
 from .head import YOSOHead
 
+from typing import Dict
+
 import todos
 import pdb
-
-
-def sem_seg_postprocess(result, img_size, output_height, output_width):
-    result = result[:, : img_size[0], : img_size[1]].expand(1, -1, -1, -1)
-    result = F.interpolate(
-        result, size=(output_height, output_width), mode="bilinear", align_corners=False
-    )[0]
-    return result
-
 
 class YOSO(nn.Module):
     def __init__(self):
@@ -36,8 +29,7 @@ class YOSO(nn.Module):
                 104, 107, 108, 110, 111, 112, 115, 116, 118, 119, 120, 121, 123, 124, 125, 126, 127, 129, 
                 130, 132, 133, 134, 135, 136, 137, 138, 139, 142, 143, 144, 146, 147, 148, 149]
         
-        self.backbone = build_resnet_backbone()
-        # self.backbone -- ResNet(...)
+        self.backbone = build_resnet50()
 
         self.yoso_neck = YOSONeck()
         self.yoso_head = YOSOHead(num_stages=2)
@@ -62,106 +54,28 @@ class YOSO(nn.Module):
 
     def forward(self, x):
         B, C, H, W = x.size()
-        # torch.save(self.state_dict, "/tmp/image_yoso.pth")
-
         x = (x - self.pixel_mean) / self.pixel_std
 
-        #tensor [x] size: [1, 3, 640, 864], min: -2.03228, max: 2.64, mean: 0.033599
-        # Good
-
-        # todos.debug.output_var("x", x)
-        # Good
-        # tensor [x] size: [1, 3, 960, 1280], min: -2.117904, max: 2.64, mean: 0.034018
-
         backbone_feats = self.backbone(x)
-        # backbone_feats.keys() -- ['res2', 'res3', 'res4', 'res5']
 
-        # Good
-        # tensor [images.tensor] size: [1, 3, 960, 1280], min: -2.117904, max: 2.64, mean: 0.034018
-        # tensor [res2] size: [1, 256, 240, 320], min: 0.0, max: 2.523891, mean: 0.14508
-        # tensor [res3] size: [1, 512, 120, 160], min: 0.0, max: 2.850623, mean: 0.076335
-        # tensor [res4] size: [1, 1024, 60, 80], min: 0.0, max: 2.428513, mean: 0.039654
-        # tensor [res5] size: [1, 2048, 30, 40], min: 0.0, max: 11.654506, mean: 0.033195
-
-        # todos.debug.output_var("res2", backbone_feats['res2'])
-        # todos.debug.output_var("res3", backbone_feats['res3'])
-        # todos.debug.output_var("res4", backbone_feats['res4'])
-        # todos.debug.output_var("res5", backbone_feats['res5'])
-
-        # Bad
-        # tensor [x] size: [1, 3, 960, 1280], min: -2.117904, max: 2.64, mean: 0.034018
-        # tensor [res2] size: [1, 256, 240, 320], min: 0.0, max: 2.523891, mean: 0.14508
-        # tensor [res3] size: [1, 512, 120, 160], min: 0.0, max: 2.850623, mean: 0.076335
-        # tensor [res4] size: [1, 1024, 60, 80], min: 0.0, max: 2.428513, mean: 0.039654
-        # tensor [res5] size: [1, 2048, 30, 40], min: 0.0, max: 11.654509, mean: 0.033195
-
-
-        # print(features)
         features = list()
         for f in ['res2', 'res3', 'res4', 'res5']:
             features.append(backbone_feats[f])
-        # outputs = self.sem_seg_head(features)
+
         neck_feats = self.yoso_neck(features)
-        # tensor [neck_feats] size: [1, 256, 160, 216], min: -60.158829, max: 78.699196, mean: 0.579509
+        cls_scores, mask_preds = self.yoso_head(neck_feats)
 
-        losses, cls_scores, mask_preds = self.yoso_head(neck_feats, None)
-
-        # todos.debug.output_var("cls_scores", cls_scores)
-        # todos.debug.output_var("mask_preds", mask_preds)
-
-        # Good
-        # tensor [cls_scores] size: [1, 100, 151], min: -34.820499, max: 3.981438, mean: -17.157784
-        # tensor [mask_preds] size: [1, 100, 240, 320], min: -290.145142, max: 23.088482, mean: -31.55003
-
-        # Bad
-        # tensor [cls_scores] size: [1, 100, 151], min: -34.820499, max: 3.981438, mean: -17.157784
-        # tensor [mask_preds] size: [1, 100, 240, 320], min: -290.144806, max: 23.088469, mean: -31.550026
-
-        # losses -- {}
-        # cls_scores.size() -- [1, 100, 151]
-        # mask_preds.size() -- [1, 100, 160, 216]
-        mask_cls_results = cls_scores #outputs["pred_logits"]
-        mask_pred_results = mask_preds #outputs["pred_masks"]
         # upsample masks
-        mask_pred_results = F.interpolate(
-            mask_pred_results,
-            size=(x.shape[-2], x.shape[-1]), # x.shape -- [1, 3, 640, 864]
+        mask_preds = F.interpolate(
+            mask_preds,
+            size=(H, W),
             mode="bilinear",
             align_corners=False,
         )
 
-        for mask_cls_result, mask_pred_result, in zip(mask_cls_results, mask_pred_results):
-            panoptic_r = self.panoptic_inference(mask_cls_result, mask_pred_result)
+        panoptic_r = self.panoptic_inference(cls_scores, mask_preds)
 
-            # Good
-            # (Pdb) panoptic_r[0].size() -- [960, 1280]
-            # (Pdb) panoptic_r[0]
-            # tensor([[2, 2, 2,  ..., 2, 2, 2],
-            #         [2, 2, 2,  ..., 2, 2, 2],
-            #         [2, 2, 2,  ..., 2, 2, 2],
-            #         ...,
-            #         [4, 4, 4,  ..., 6, 6, 6],
-            #         [4, 4, 4,  ..., 6, 6, 6],
-            #         [4, 4, 4,  ..., 6, 6, 6]], device='cuda:0', dtype=torch.int32)
-            # panoptic_r[1]
-            # {'id': 1, 'isthing': False, 'category_id': 17}, 
-            # {'id': 2, 'isthing': False, 'category_id': 2}, 
-            # {'id': 3, 'isthing': False, 'category_id': 1}, 
-            # {'id': 4, 'isthing': False, 'category_id': 9}, 
-            # {'id': 5, 'isthing': False, 'category_id': 0}, 
-            # {'id': 6, 'isthing': False, 'category_id': 6}, 
-            # {'id': 7, 'isthing': False, 'category_id': 4}
-
-            # Bad
-            # {'id': 1, 'isthing': False, 'category_id': 17}, 
-            # {'id': 2, 'isthing': False, 'category_id': 2}, 
-            # {'id': 3, 'isthing': False, 'category_id': 1}, 
-            # {'id': 4, 'isthing': False, 'category_id': 9}, 
-            # {'id': 5, 'isthing': False, 'category_id': 0}, 
-            # {'id': 6, 'isthing': False, 'category_id': 6}, 
-            # {'id': 7, 'isthing': False, 'category_id': 4}
-
-            return panoptic_r[0].unsqueeze(0).unsqueeze(0)
+        return panoptic_r.unsqueeze(0).unsqueeze(0)
 
 
     def panoptic_inference(self, mask_cls, mask_pred):
@@ -179,17 +93,16 @@ class YOSO(nn.Module):
 
         h, w = cur_masks.shape[-2:]
         panoptic_seg = torch.zeros((h, w), dtype=torch.int32, device=cur_masks.device)
-        segments_info = []
 
         current_segment_id = 0
 
         if cur_masks.shape[0] == 0:
             # We didn't detect any mask :(
-            return panoptic_seg, segments_info
+            return panoptic_seg
         else:
             # take argmax
             cur_mask_ids = cur_prob_masks.argmax(0)
-            stuff_memory_list = {}
+            stuff_memory_list: Dict[int, int] = {}
             for k in range(cur_classes.shape[0]):
                 pred_class = cur_classes[k].item()
 
@@ -211,15 +124,7 @@ class YOSO(nn.Module):
                             stuff_memory_list[int(pred_class)] = current_segment_id + 1
 
                     current_segment_id += 1
-                    panoptic_seg[mask] = current_segment_id
+                    panoptic_seg[mask] = int(pred_class) # current_segment_id
 
-                    segments_info.append(
-                        {
-                            "id": current_segment_id,
-                            "isthing": bool(isthing),
-                            "category_id": int(pred_class),
-                        }
-                    )
-
-            return panoptic_seg, segments_info
+            return panoptic_seg
 
